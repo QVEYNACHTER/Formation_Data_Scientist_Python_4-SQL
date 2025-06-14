@@ -1,0 +1,55 @@
+-- Requête 1
+-- En excluant les commandes annulées, quelles sont les commandes récentes de moins de 3 mois que les clients ont reçues avec au moins 3 jours de retard ?
+SELECT *
+FROM orders
+WHERE order_status != 'canceled'
+AND order_purchase_timestamp >= date('2018-10-17', '-3 months')
+AND order_delivered_customer_date >= date(order_estimated_delivery_date, '+3 days')
+ORDER BY order_purchase_timestamp;
+
+-- Requête 2
+-- Qui sont les vendeurs ayant généré un chiffre d'affaires de plus de 100 000 Real sur des commandes livrées via Olist ?
+SELECT oi.seller_id,
+       ROUND(SUM(op.payment_value), 2) AS chiffre_d_affaires
+FROM order_pymts op
+JOIN order_items oi ON op.order_id = oi.order_id
+GROUP BY oi.seller_id
+HAVING chiffre_d_affaires > 100000
+ORDER BY chiffre_d_affaires DESC;
+
+-- Requête 3
+-- Qui sont les nouveaux vendeurs (moins de 3 mois d'ancienneté) qui sont déjà très engagés avec la plateforme (ayant déjà vendu plus de 30 produits) ?
+WITH premiere_vente AS (
+    SELECT oi.seller_id,
+           MIN(o.order_purchase_timestamp) AS date_premiere_vente
+    FROM orders o
+    JOIN order_items oi ON o.order_id = oi.order_id
+    GROUP BY oi.seller_id),
+    
+    nouveaux_vendeurs AS (
+    SELECT pv.seller_id
+    FROM premiere_vente pv
+    WHERE pv.date_premiere_vente >= date('2018-10-17', '-3 months'))
+    
+SELECT oi.seller_id,
+       COUNT(oi.product_id) AS total_produits_vendus
+FROM order_items oi
+JOIN nouveaux_vendeurs nv ON oi.seller_id = nv.seller_id
+GROUP BY oi.seller_id
+HAVING total_produits_vendus > 30
+ORDER BY total_produits_vendus DESC;
+
+-- Requête 4
+-- Quels sont les 5 codes postaux, enregistrant plus de 30 reviews, avec le pire review score moyen sur les 12 derniers mois ?
+SELECT s.seller_zip_code_prefix AS code_postal,
+       ROUND(AVG(orv.review_score), 2) AS review_score_moyen,
+       COUNT(DISTINCT orv.order_id) AS total_reviews
+FROM sellers s
+JOIN order_items oi ON s.seller_id = oi.seller_id
+JOIN orders o ON oi.order_id = o.order_id
+JOIN order_reviews orv ON o.order_id = orv.order_id
+WHERE orv.review_creation_date >= date('2018-10-17', '-1 year')
+GROUP BY code_postal
+HAVING total_reviews > 30
+ORDER BY review_score_moyen ASC
+LIMIT 5;
